@@ -8,6 +8,15 @@ import datetime
 from datetime import datetime
 import pytz
 import os
+import tkinter as tk
+from tkinter import messagebox  
+from tkinter import Toplevel  
+
+
+import tkinter as tk
+from tkinter import messagebox  # To show a message when the button is clicked
+
+
 
 
 
@@ -40,15 +49,16 @@ def print_to_printer(text):
 
 # Database connection
 mydb = mysql.connector.connect(
-    host="#",
-    user="#",
-    password="#",
-    database="#"
+    host="plesk.remote.ac",
+    user="ws330240_Alistair",
+    password="ea#4M786q",
+    database="ws330240_AandR"
 )
 
 mycursor = mydb.cursor()
 
 
+   
 def read_serial_data(port, baud_rate):
     ser = serial.Serial(port, baud_rate)
     read_count = 0  # Counter to track the number of readings
@@ -66,7 +76,7 @@ def read_serial_data(port, baud_rate):
 
                 if decoded_data.startswith("Gross"):
                     print(decoded_data)
-                    print_to_printer(decoded_data)
+                    #print_to_printer(decoded_data)
                     number = extract_number(decoded_data)
 
                     # Increment the read count
@@ -81,7 +91,7 @@ def read_serial_data(port, baud_rate):
                     
                     # Insert into the database
                     current_time = datetime.now()
-                    sql = "#"
+                    sql = "INSERT INTO `LakesWeighHead` (`BagID`, `GrossWeight`, `DateandTime`, `BatchNumb`,`ProductType`) VALUES ('', %s, %s, %s,%s)"
                     val = (number, current_time, user_input,product)
                     mycursor.execute(sql, val)
                     mydb.commit()
