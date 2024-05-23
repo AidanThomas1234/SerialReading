@@ -72,44 +72,60 @@ def print_file_to_word_doc(file_path, report_date):
     print(wrd_file_path)
 
 # Used to print files 
-def print_file_to_printer(file_path):
+import win32ui
+import win32con
+
+def print_file_to_printer(data_string):
     printer_name = "Alistairsprinter"  # Adjust to your printer
     hdc = win32ui.CreateDC()
     hdc.CreatePrinterDC(printer_name)
     hdc.StartDoc("Weigh Head Scaled")
     hdc.StartPage()
+    
     y = 100  # Starting Y position
 
-    try:
-        with open(file_path, 'r') as file:
-            for line in file:
-                # Write a blank line to leave a gap between each line of text
-                hdc.TextOut(100, y, "")
-                y += 100  # Increment Y position for the blank line
-                
-                # Write the actual line of text
-                hdc.TextOut(100, y, line.strip())
-                y += 100  # Increment Y position for next line
-    except FileNotFoundError:
-        print(f"File '{file_path}' not found.")
-        return
-    except Exception as e:
-        print(f"An error occurred while reading the file: {e}")
-        return
+    lines = data_string.split('\n')
+    
+    for line in lines:
+        # Determine the font size and style based on the content of the line
+        if 'BagID' in line:
+            font_size = 200
+            font_style = win32con.FW_BOLD
+            font_italic = False
+        elif 'Product' in line:
+            font_size = 180
+            font_style = win32con.FW_NORMAL
+            font_italic = False
+        else:
+            font_size = 160
+            font_style = win32con.FW_NORMAL
+            font_italic = False
+
+        # Create and select the font
+        font = win32ui.CreateFont({
+            "name": "Arial",  # Use the desired font name
+            "height": font_size,
+            "weight": font_style,
+            "italic": font_italic,
+        })
+        hdc.SelectObject(font)
+        
+        # Write the actual line of text
+        hdc.TextOut(100, y, line.strip())
+        y += font_size * 10  # Increment Y position for next line based on font size
 
     hdc.EndPage()
     hdc.EndDoc()
     hdc.DeleteDC()
 
 # Database connection
-mydb = mysql.connector.connect(
-    host="plesk.remote.ac",
-    user="ws330240_Alistair",
-    password="ea#4M786q",
-    database="ws330240_AandR"
-)
-
-mycursor = mydb.cursor()
+def get_db_connection():
+    return mysql.connector.connect(
+        host="plesk.remote.ac",
+        user="ws330240_Alistair",
+        password="ea#4M786q",
+        database="ws330240_AandR"
+    )
 
 exit_flag = False
 
@@ -121,7 +137,6 @@ def read_serial_data(port, baud_rate, ser=None):
 
     try:
         read_count = 0  
-
         batch_number = get_batch_number()
         if batch_number is None:  
             return
@@ -148,6 +163,8 @@ def read_serial_data(port, baud_rate, ser=None):
                         product = get_product_type()
 
                     current_time = datetime.now()
+                    mydb = get_db_connection()
+                    mycursor = mydb.cursor()
                     sql = "INSERT INTO `LakesWeighHead` (`BagID`, `GrossWeight`, `DateandTime`, `BatchNumb`, `ProductType`) VALUES ('', %s, %s, %s, %s)"
                     val = (number, current_time, batch_number, product)
                     mycursor.execute(sql, val)
@@ -160,9 +177,11 @@ def read_serial_data(port, baud_rate, ser=None):
 
                     print(f"\n\nBatch: {batch_number}   Weight: {number}    Product: {product}    BagID: {most_recent_id}       Date and time: {current_time}\n")
 
-                    # Uncomment to print to the printer
-                    # print_file_to_printer(f"\n\nBatch: {batch_number}   Weight: {number}    Product: {product}    BagID: {most_recent_id}       Date and time: {current_time}\n")
+                    data_string = f"\n\nBatch: {batch_number}   Weight: {number}    Product: {product}    BagID: {most_recent_id}"
+                    print_file_to_printer(data_string)
         
+                    mycursor.close()
+                    mydb.close()
 
             time.sleep(0.1)  # Small delay to prevent CPU overload
 
@@ -183,7 +202,6 @@ def read_serial_data(port, baud_rate, ser=None):
 
             # Reopen menu
             menu(port, baud_rate)
-
 
 def get_batch_number():
     while True:
@@ -216,8 +234,10 @@ def update(port, baud_rate, ser):
     
     while True:
         bag_id = input("-->")
-        if bag_id:
+        if bag_id.isdigit():
             break
+        else:
+            print("Invalid input. Please enter a numeric Bag ID.")
 
     try:
         while True:
@@ -229,6 +249,8 @@ def update(port, baud_rate, ser):
                     new_weight = extract_number(decoded_data)
 
                     if new_weight is not None:
+                        mydb = get_db_connection()
+                        mycursor = mydb.cursor()
                         sql = "UPDATE `LakesWeighHead` SET `GrossWeight` = %s WHERE `BagID` = %s"
                         val = (new_weight, bag_id)
                         mycursor.execute(sql, val)
@@ -243,7 +265,16 @@ def update(port, baud_rate, ser):
                             batch_number, product = result
                             current_time = datetime.now()
                             print(f"Updated Bag ID: {bag_id}, New Weight: {new_weight}, Batch Number: {batch_number}, Product: {product}, Date and Time: {current_time}")
+
+                            data_string = f"\n\nBatch: {batch_number}   Weight: {new_weight}    Product: {product}    BagID: {bag_id}"
+                            print_file_to_printer(data_string)
+
                             break  # Exit after a successful update
+                        else:
+                            print("Bag ID not found. Please try again.")
+
+                        mycursor.close()
+                        mydb.close()
                     else:
                         print("Failed to extract a valid number from the scale data. Please try again.")
 
@@ -255,11 +286,7 @@ def update(port, baud_rate, ser):
     finally:
         menu(port, baud_rate, ser)  # Return to the main menu
 
-
-
-
-
-def previous_day_reports(port, baud_rate,ser):
+def previous_day_reports(port, baud_rate, ser):
     today = datetime.now().date()
     days = [today - timedelta(days=i) for i in range(1, 21)]  # Last 20 days
 
@@ -284,6 +311,9 @@ def previous_day_reports(port, baud_rate,ser):
 
     next_day = selected_date + timedelta(days=1)
     
+    mydb = get_db_connection()
+    mycursor = mydb.cursor()
+
     sql = "SELECT * FROM `LakesWeighHead` WHERE `DateandTime` >= %s AND `DateandTime` < %s"
     val = (selected_date, next_day)
     mycursor.execute(sql, val)
@@ -306,6 +336,9 @@ def previous_day_reports(port, baud_rate,ser):
     else:
         print(f"No entries found for {selected_date}.")
 
+    mycursor.close()
+    mydb.close()
+
     menu(port, baud_rate, ser)
 
 def exit_listener(port, baud_rate):
@@ -317,13 +350,6 @@ def exit_listener(port, baud_rate):
             if input_char == '0':
                 exit_flag = True
                 return
-
-
-
-
-
-
-
 
 def menu(port, baud_rate, ser=None):
     print("\nWeigh Head System\n")
@@ -344,9 +370,9 @@ def menu(port, baud_rate, ser=None):
         exit_thread.start()
         read_serial_data(port, baud_rate, ser)
     elif MenuOption == "2":
-        update(port, baud_rate,ser)
+        update(port, baud_rate, ser)
     elif MenuOption == "3":
-        previous_day_reports(port, baud_rate,ser)
+        previous_day_reports(port, baud_rate, ser)
     else:
         print("Invalid Input")
         menu(port, baud_rate, ser)  # Return to menu for invalid input
@@ -359,4 +385,3 @@ if __name__ == "__main__":
 
     # Add this line to wait for user input before closing the window
     input("Press Enter to exit...")
-
