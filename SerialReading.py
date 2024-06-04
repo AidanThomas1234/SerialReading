@@ -1,9 +1,7 @@
+import os
 import serial
 import time
-import win32print
 import mysql.connector
-import win32ui
-import re
 from datetime import datetime, timedelta
 import threading
 import msvcrt  # For Windows getch() function
@@ -12,6 +10,15 @@ from docx import Document
 from docx.shared import Pt
 from docx.enum.table import WD_TABLE_ALIGNMENT
 import gc
+import re
+# Used to print files 
+import win32ui
+import win32con
+
+exit_flag = False
+
+# Get the directory of the current script
+script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Extracts the number from a string
 def extract_number(input_string):
@@ -24,56 +31,18 @@ def extract_number(input_string):
         print("No numbers found in the input string.")
         return None
 
-# Function to print text to a specific printer
-def print_file_to_word_doc(file_path, report_date):
-    doc = Document()
-    table = doc.add_table(rows=1, cols=5)
-    table.style = 'Table Grid'  # Apply table style
+# Database connection pool
+connection_pool = mysql.connector.pooling.MySQLConnectionPool(
+    pool_name="mypool",
+    pool_size=5,
+    host="plesk.remote.ac",
+    user="ws330240_Alistair",
+    password="ea#4M786q",
+    database="ws330240_AandR"
+)
 
-    # Add header row with column names
-    hdr_cells = table.rows[0].cells
-    hdr_cells[0].text = 'BagID'
-    hdr_cells[1].text = 'GrossWeight'
-    hdr_cells[2].text = 'BatchNumb'
-    hdr_cells[3].text = 'ProductType'
-    hdr_cells[4].text = 'DateandTime'
-
-    try:
-        with open(file_path, 'r') as file:
-            csv_reader = csv.reader(file)
-            next(csv_reader)  # Skip header row
-            for row in csv_reader:
-                row_cells = table.add_row().cells
-                for i, cell_value in enumerate(row):
-                    row_cells[i].text = cell_value
-    except FileNotFoundError:
-        print(f"File '{file_path}' not found.")
-        return
-    except Exception as e:
-        print(f"An error occurred while reading the file: {e}")
-        return
-
-    # Format table
-    for row in table.rows:
-        for cell in row.cells:
-            paragraphs = cell.paragraphs
-            for paragraph in paragraphs:
-                for run in paragraph.runs:
-                    run.font.size = Pt(10)  # Adjust font size
-
-    # Center align text in all cells
-    for row in table.rows:
-        for cell in row.cells:
-            cell.paragraphs[0].alignment = WD_TABLE_ALIGNMENT.CENTER
-
-    doc.save(f'report_{report_date.strftime("%Y-%m-%d_%H-%M-%S")}.docx') # Save Word document with date and time
-    pathend = (f'report_{report_date.strftime("%Y-%m-%d_%H-%M-%S")}.docx')
-    wrd_file_path = "C:/Users/Projects.PURNHOUSEFARM/" + pathend
-    print(wrd_file_path)
-
-# Used to print files 
-import win32ui
-import win32con
+def get_db_connection():
+    return connection_pool.get_connection()
 
 def print_file_to_printer(data_string):
     printer_name = "Alistairsprinter"  # Adjust to your printer
@@ -117,17 +86,54 @@ def print_file_to_printer(data_string):
     hdc.EndPage()
     hdc.EndDoc()
     hdc.DeleteDC()
+    pass
 
-# Database connection
-def get_db_connection():
-    return mysql.connector.connect(
-        host="plesk.remote.ac",
-        user="ws330240_Alistair",
-        password="ea#4M786q",
-        database="ws330240_AandR"
-    )
+def print_file_to_word_doc(file_path, report_date):
+    doc = Document()
+    table = doc.add_table(rows=1, cols=5)
+    table.style = 'Table Grid'  # Apply table style
 
-exit_flag = False
+    # Add header row with column names
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = 'BagID'
+    hdr_cells[1].text = 'GrossWeight'
+    hdr_cells[2].text = 'BatchNumb'
+    hdr_cells[3].text = 'ProductType'
+    hdr_cells[4].text = 'DateandTime'
+
+    try:
+        with open(file_path, 'r') as file:
+            csv_reader = csv.reader(file)
+            next(csv_reader)  # Skip header row
+            for row in csv_reader:
+                row_cells = table.add_row().cells
+                for i, cell_value in enumerate(row):
+                    row_cells[i].text = cell_value
+    except FileNotFoundError:
+        print(f"File '{file_path}' not found.")
+        return
+    except Exception as e:
+        print(f"An error occurred while reading the file: {e}")
+        return
+
+    # Format table
+    for row in table.rows:
+        for cell in row.cells:
+            paragraphs = cell.paragraphs
+            for paragraph in paragraphs:
+                for run in paragraph.runs:
+                    run.font.size = Pt(10)  # Adjust font size
+
+    # Center align text in all cells
+    for row in table.rows:
+        for cell in row.cells:
+            cell.paragraphs[0].alignment = WD_TABLE_ALIGNMENT.CENTER
+
+    # Save Word document with date and time in the script directory
+    doc_filename = f'report_{report_date.strftime("%Y-%m-%d_%H-%M-%S")}.docx'
+    doc.save(os.path.join(script_dir, doc_filename))  
+    print(f"Word document saved to {os.path.join(script_dir, doc_filename)}")
+    pass
 
 def read_serial_data(port, baud_rate, ser=None):
     global exit_flag
@@ -151,39 +157,40 @@ def read_serial_data(port, baud_rate, ser=None):
                 break  # Exit loop
 
             if ser.in_waiting > 0:
-                data = ser.readline().strip()
-                decoded_data = data.decode("utf-8")
+                data = ser.read(ser.in_waiting).decode("utf-8")
+                lines = data.split('\n')
+                
+                for decoded_data in lines:
+                    if decoded_data.startswith("Gross"):
+                        number = extract_number(decoded_data)
+                        read_count += 1
 
-                if decoded_data.startswith("Gross"):
-                    number = extract_number(decoded_data)
-                    read_count += 1
+                        if read_count % 22 == 0:
+                            batch_number = get_batch_number()
+                            product = get_product_type()
 
-                    if read_count % 22 == 0:
-                        batch_number = get_batch_number()
-                        product = get_product_type()
+                        current_time = datetime.now()
+                        mydb = get_db_connection()
+                        mycursor = mydb.cursor()
+                        sql = "INSERT INTO `LakesWeighHead` (`BagID`, `GrossWeight`, `DateandTime`, `BatchNumb`, `ProductType`) VALUES ('', %s, %s, %s, %s)"
+                        val = (number, current_time, batch_number, product)
+                        mycursor.execute(sql, val)
+                        mydb.commit()
 
-                    current_time = datetime.now()
-                    mydb = get_db_connection()
-                    mycursor = mydb.cursor()
-                    sql = "INSERT INTO `LakesWeighHead` (`BagID`, `GrossWeight`, `DateandTime`, `BatchNumb`, `ProductType`) VALUES ('', %s, %s, %s, %s)"
-                    val = (number, current_time, batch_number, product)
-                    mycursor.execute(sql, val)
-                    mydb.commit()
+                        idsql = "SELECT `BagID` FROM `LakesWeighHead` ORDER BY `BagID` DESC LIMIT 1;"
+                        mycursor.execute(idsql)
+                        CurrentID = mycursor.fetchone()
+                        most_recent_id = CurrentID[0]
 
-                    idsql = "SELECT `BagID` FROM `LakesWeighHead` ORDER BY `BagID` DESC LIMIT 1;"
-                    mycursor.execute(idsql)
-                    CurrentID = mycursor.fetchone()
-                    most_recent_id = CurrentID[0]
+                        print(f"\n\nBatch: {batch_number}   Weight: {number}    Product: {product}    BagID: {most_recent_id}       Date and time: {current_time}\n")
 
-                    print(f"\n\nBatch: {batch_number}   Weight: {number}    Product: {product}    BagID: {most_recent_id}       Date and time: {current_time}\n")
+                        data_string = f"\n\nBatch: {batch_number}   Weight: {number}    Product: {product}    BagID: {most_recent_id}"
+                        print_file_to_printer(data_string)
+                
+                        mycursor.close()
+                        mydb.close()
 
-                    data_string = f"\n\nBatch: {batch_number}   Weight: {number}    Product: {product}    BagID: {most_recent_id}"
-                    print_file_to_printer(data_string)
-        
-                    mycursor.close()
-                    mydb.close()
-
-            time.sleep(0.1)  # Small delay to prevent CPU overload
+            time.sleep(0.01)  # Small delay to prevent CPU overload
 
     except serial.SerialException as e:
         print(f"Serial exception: {e}")
@@ -285,6 +292,7 @@ def update(port, baud_rate, ser):
 
     finally:
         menu(port, baud_rate, ser)  # Return to the main menu
+    pass
 
 def previous_day_reports(port, baud_rate, ser):
     today = datetime.now().date()
@@ -322,16 +330,15 @@ def previous_day_reports(port, baud_rate, ser):
     
     if results:
         csv_filename = f"previous_day_report_{selected_date}.csv"  # CSV filename based on selected date
-        with open(csv_filename, mode='w', newline='') as csvfile:
+        csv_file_path = os.path.join(script_dir, csv_filename)
+        with open(csv_file_path, mode='w', newline='') as csvfile:
             csv_writer = csv.writer(csvfile)
             csv_writer.writerow(["BagID", "GrossWeight", "BatchNumb", "ProductType", "DateandTime"])  # Write header
             for row in results:
                 csv_writer.writerow(row)  
-        print(f"Previous day report saved to {csv_filename}.")
-        csv_file_path = "C:/Users/Projects.PURNHOUSEFARM/" + csv_filename
+        print(f"Previous day report saved to {csv_file_path}.")
         
         print_file_to_word_doc(csv_file_path, selected_date)
-        print("File Saved to:", csv_file_path)
         
     else:
         print(f"No entries found for {selected_date}.")
@@ -340,6 +347,7 @@ def previous_day_reports(port, baud_rate, ser):
     mydb.close()
 
     menu(port, baud_rate, ser)
+    pass
 
 def exit_listener(port, baud_rate):
     global exit_flag
@@ -383,5 +391,4 @@ if __name__ == "__main__":
 
     menu(port, baud_rate)
 
-    # Add this line to wait for user input before closing the window
     input("Press Enter to exit...")
