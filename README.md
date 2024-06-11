@@ -6,9 +6,9 @@ This Program will:
     - Sends the data to a sql database 
 
 
-Packages:
-pip install mysql-connector-python
-pip install python-docx
-pip install pyserial
-pip install pywin32
+-Packages:
+    -pip install mysql-connector-python
+    -pip install python-docx
+    -pip install pyserial
+    -pip install pywin32
 
