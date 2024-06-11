@@ -212,7 +212,7 @@ def read_serial_data(port, baud_rate, ser=None):
 
 def get_batch_number():
     while True:
-        user_input = input("Please enter the batch number to begin (or enter 0 to exit): ")
+        user_input = input("Please enter the batch number to begin: ")
         if user_input == '0':
             return None
         try:
@@ -296,14 +296,14 @@ def update(port, baud_rate, ser):
 
 def previous_day_reports(port, baud_rate, ser):
     today = datetime.now().date()
-    days = [today - timedelta(days=i) for i in range(1, 21)]  # Last 20 days
+    days = [today - timedelta(days=i) for i in range(20)]  # Last 20 days including today
 
     print("Select a day to view the report:")
     for i, day in enumerate(days, 1):
         print(f"{i}) {day}")
 
     while True:
-        user_input = input("Enter the number corresponding to the day (or 0 to exit): ")
+        user_input = input("Enter the number corresponding to the day: ")
         if user_input == '0':
             menu(port, baud_rate)
             return
@@ -349,9 +349,10 @@ def previous_day_reports(port, baud_rate, ser):
     menu(port, baud_rate, ser)
     pass
 
+
 def exit_listener(port, baud_rate):
     global exit_flag
-    print("Press '0' to exit to the menu.")
+    print("Press '0' to exit to the menu \n")
     while True:
         if msvcrt.kbhit():  
             input_char = msvcrt.getch().decode('utf-8')
