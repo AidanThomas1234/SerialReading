@@ -4,3 +4,11 @@ This Program will:
 - When the porgram gets a input from the serial port it will:
     - Print to the defined printer or the defult if prefered 
     - Sends the data to a sql database 
+
+
+Packages:
+pip install mysql-connector-python
+pip install python-docx
+pip install pyserial
+pip install pywin32
+
