@@ -11,4 +11,10 @@ This Program will:
     - pip install python-docx
     - pip install pyserial
     - pip install pywin32
+# Packages
+    - pip install mysql-connector-python
+    - pip install python-docx
+    - pip install pywin32
+    - pip install pywin32
+
 
