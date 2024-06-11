@@ -7,8 +7,8 @@ This Program will:
 
 
 -Packages:
-    -pip install mysql-connector-python
-    -pip install python-docx
-    -pip install pyserial
-    -pip install pywin32
+    - pip install mysql-connector-python
+    - pip install python-docx
+    - pip install pyserial
+    - pip install pywin32
 
